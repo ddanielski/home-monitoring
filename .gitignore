@@ -12,6 +12,7 @@ dist/
 *.out
 go.work
 go.work.sum
+coverage.html
 
 # Terraform
 .terraform/
@@ -50,3 +51,6 @@ logs/
 # Local config overrides
 local.tf
 local.tfvars
+
+# Go binaries
+/scripts/deploy/deploy
