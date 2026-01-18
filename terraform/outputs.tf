@@ -17,8 +17,3 @@ output "pubsub_telemetry_topic" {
   description = "Pub/Sub topic for telemetry events"
   value       = module.pubsub.telemetry_topic_name
 }
-
-output "provisioner_service_account" {
-  description = "Service account email for device provisioning (impersonate this)"
-  value       = module.iam.provisioner_sa_email
-}

@@ -16,9 +16,7 @@ const SchemaCacheTTL = 24 * time.Hour
 
 // Config holds handler configuration
 type Config struct {
-	ProjectID         string
-	ServiceURL        string   // Cloud Run service URL (for IAM token validation)
-	ProvisionerEmails []string // Emails allowed to provision devices
+	ProjectID string
 }
 
 // Handlers contains all HTTP handlers and their dependencies

@@ -29,16 +29,9 @@ variable "allow_unauthenticated" {
   default     = false
 }
 
-variable "provisioner_emails" {
-  description = "Comma-separated list of emails allowed to provision devices"
+variable "admin_api_key_secret_id" {
+  description = "Secret Manager secret ID for admin API key"
   type        = string
-  default     = ""
-}
-
-variable "service_url" {
-  description = "Cloud Run service URL for IAM token audience validation"
-  type        = string
-  default     = ""
 }
 
 
@@ -85,13 +78,15 @@ resource "google_cloud_run_v2_service" "telemetry_api" {
         name  = "ENVIRONMENT"
         value = "production"
       }
+      # Admin API key from Secret Manager
       env {
-        name  = "PROVISIONER_EMAILS"
-        value = var.provisioner_emails
-      }
-      env {
-        name  = "SERVICE_URL"
-        value = var.service_url
+        name = "ADMIN_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.admin_api_key_secret_id
+            version = "latest"
+          }
+        }
       }
 
       startup_probe {

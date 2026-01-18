@@ -53,11 +53,6 @@ resource "google_artifact_registry_repository" "containers" {
 module "iam" {
   source     = "./modules/iam"
   project_id = var.project_id
-  region     = var.region
-
-  # These are set after initial deploy (circular dependency with cloud_run)
-  cloud_run_service_name = var.cloud_run_service_name
-  provisioner_users      = var.provisioner_users
 
   depends_on = [google_project_service.apis]
 }
@@ -77,6 +72,16 @@ module "pubsub" {
   depends_on = [google_project_service.apis]
 }
 
+module "secrets" {
+  source     = "./modules/secrets"
+  project_id = var.project_id
+
+  telemetry_api_sa_email = module.iam.telemetry_api_sa_email
+  provisioner_users      = var.provisioner_users
+
+  depends_on = [google_project_service.apis, module.iam]
+}
+
 module "cloud_run" {
   source = "./modules/cloud-run"
 
@@ -86,15 +91,14 @@ module "cloud_run" {
   image              = "${var.region}-docker.pkg.dev/${var.project_id}/${var.repository_id}/telemetry-api:${var.image_tag}"
   firestore_database = module.firestore.database_name
 
-  allow_unauthenticated = var.allow_unauthenticated
-  # The provisioner SA is the only email allowed to provision devices
-  provisioner_emails    = module.iam.provisioner_sa_email
-  service_url           = var.service_url
+  allow_unauthenticated    = var.allow_unauthenticated
+  admin_api_key_secret_id  = module.secrets.admin_api_key_secret_id
 
   depends_on = [
     google_project_service.apis,
     google_artifact_registry_repository.containers,
     module.iam,
     module.firestore,
+    module.secrets,
   ]
 }

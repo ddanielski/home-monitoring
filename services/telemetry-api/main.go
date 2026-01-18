@@ -46,21 +46,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Service URL for IAM token validation
-	serviceURL := os.Getenv("SERVICE_URL")
-
 	// CORS origins for admin endpoints (comma-separated)
 	adminOrigins := parseCommaSeparated(os.Getenv("ADMIN_CORS_ORIGINS"))
 
-	// Provisioner emails (comma-separated list of emails allowed to provision devices)
-	provisionerEmails := handlers.ParseProvisionerEmails(os.Getenv("PROVISIONER_EMAILS"))
+	// Admin API key (provisioners get this via: gcloud secrets versions access latest --secret=admin-api-key)
+	adminAPIKey := os.Getenv("ADMIN_API_KEY")
+	if adminAPIKey == "" {
+		slog.Warn("ADMIN_API_KEY not set - admin endpoints will reject all requests")
+	}
 
 	// Initialize handlers with dependencies
 	ctx := context.Background()
 	h, err := handlers.New(ctx, handlers.Config{
-		ProjectID:         projectID,
-		ServiceURL:        serviceURL,
-		ProvisionerEmails: provisionerEmails,
+		ProjectID: projectID,
 	})
 	if err != nil {
 		slog.Error("failed to initialize handlers", "error", err)
@@ -68,10 +66,9 @@ func main() {
 	}
 	defer h.Close()
 
-	// IAM middleware for admin endpoints
-	iamAuth := handlers.NewIAMAuthMiddleware(handlers.IAMAuthConfig{
-		Audience:          serviceURL,
-		ProvisionerEmails: provisionerEmails,
+	// Admin auth middleware
+	adminAuth := handlers.NewAdminAuthMiddleware(handlers.AdminAuthConfig{
+		APIKey: adminAPIKey,
 	})
 
 	// Rate limiter for auth endpoint (protect against brute force)
@@ -106,14 +103,15 @@ func main() {
 	mux.HandleFunc("GET /devices/{id}", h.AuthMiddleware(h.GetDevice))
 
 	// =========================================================================
-	// Admin endpoints (require GCP IAM identity token + provisioner email)
+	// Admin endpoints (require API key from Secret Manager)
+	// Provisioners get the key via: gcloud secrets versions access latest --secret=admin-api-key
 	// =========================================================================
-	mux.HandleFunc("POST /admin/devices/provision", iamAuth.RequireProvisioner(h, h.ProvisionDevice))
-	mux.HandleFunc("POST /admin/devices/{id}/revoke", iamAuth.RequireProvisioner(h, h.RevokeDevice))
-	mux.HandleFunc("POST /admin/commands", iamAuth.RequireProvisioner(h, h.CreateCommand))
-	mux.HandleFunc("DELETE /admin/commands/{id}", iamAuth.RequireProvisioner(h, h.DeleteCommand))
-	mux.HandleFunc("POST /admin/schemas/{app}/{version}", iamAuth.RequireProvisioner(h, h.UploadSchema))
-	mux.HandleFunc("GET /admin/schemas/{app}/{version}", iamAuth.RequireProvisioner(h, h.GetSchema))
+	mux.HandleFunc("POST /admin/devices/provision", adminAuth.RequireAdminKey(h, h.ProvisionDevice))
+	mux.HandleFunc("POST /admin/devices/{id}/revoke", adminAuth.RequireAdminKey(h, h.RevokeDevice))
+	mux.HandleFunc("POST /admin/commands", adminAuth.RequireAdminKey(h, h.CreateCommand))
+	mux.HandleFunc("DELETE /admin/commands/{id}", adminAuth.RequireAdminKey(h, h.DeleteCommand))
+	mux.HandleFunc("POST /admin/schemas/{app}/{version}", adminAuth.RequireAdminKey(h, h.UploadSchema))
+	mux.HandleFunc("GET /admin/schemas/{app}/{version}", adminAuth.RequireAdminKey(h, h.GetSchema))
 
 	// Apply middleware chain (order matters: first is outermost)
 	handler := middleware.Chain(mux,

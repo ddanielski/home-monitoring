@@ -34,20 +34,8 @@ variable "repository_id" {
 }
 
 variable "provisioner_users" {
-  description = "List of user emails allowed to impersonate the provisioner service account"
+  description = "List of user emails allowed to access the admin API key secret"
   type        = list(string)
   default     = []
-}
-
-variable "cloud_run_service_name" {
-  description = "Cloud Run service name (set after first deploy to enable IAM bindings)"
-  type        = string
-  default     = ""
-}
-
-variable "service_url" {
-  description = "Cloud Run service URL (set after first deploy for IAM token validation)"
-  type        = string
-  default     = ""
 }
 

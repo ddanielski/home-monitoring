@@ -4,9 +4,5 @@ environment           = "dev"
 repository_id         = "home-monitoring"
 allow_unauthenticated = true  # Required: devices use app-level auth, not GCP IAM
 
-# Users allowed to impersonate the provisioner service account
+# Users allowed to access the admin API key from Secret Manager
 provisioner_users = ["danielski.guilherme@gmail.com"]
-
-# Set after first deploy, then re-run tofu apply
-cloud_run_service_name = "telemetry-api"
-# service_url is auto-detected from request Host header

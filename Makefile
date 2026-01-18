@@ -135,29 +135,20 @@ tf-fmt:
 # Device Provisioning (requires gcloud auth login)
 # =============================================================================
 
-# Provisioner service account (derived from project)
-PROVISIONER_SA = provisioner@$(GCP_PROJECT).iam.gserviceaccount.com
-
-# Get identity token for calling admin endpoints (via SA impersonation)
-identity-token:
-	@service_url=$$(gcloud run services describe telemetry-api --region $(GCP_REGION) --project $(GCP_PROJECT) --format 'value(status.url)' 2>/dev/null) && \
-	gcloud auth print-identity-token \
-		--impersonate-service-account=$(PROVISIONER_SA) \
-		--audiences="$$service_url"
+# Get admin API key from Secret Manager
+admin-api-key:
+	@gcloud secrets versions access latest --secret=admin-api-key --project=$(GCP_PROJECT)
 
 # Provision a new device (returns UUID + secret to store on device)
 provision-device:
 	@service_url=$$(gcloud run services describe telemetry-api --region $(GCP_REGION) --project $(GCP_PROJECT) --format 'value(status.url)') && \
 	echo "Service URL: $$service_url" && \
-	echo "Provisioner SA: $(PROVISIONER_SA)" && \
 	read -p "Enter MAC address (e.g., AA:BB:CC:DD:EE:FF): " mac_address && \
-	echo "Getting identity token via SA impersonation..." && \
-	token=$$(gcloud auth print-identity-token \
-		--impersonate-service-account=$(PROVISIONER_SA) \
-		--audiences="$$service_url") && \
+	echo "Getting admin API key from Secret Manager..." && \
+	api_key=$$(gcloud secrets versions access latest --secret=admin-api-key --project=$(GCP_PROJECT)) && \
 	echo "Provisioning device..." && \
 	curl -s -X POST "$$service_url/admin/devices/provision" \
-		-H "Authorization: Bearer $$token" \
+		-H "Authorization: Bearer $$api_key" \
 		-H "Content-Type: application/json" \
 		-d "{\"mac_address\": \"$$mac_address\"}" | jq .
 
