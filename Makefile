@@ -200,12 +200,22 @@ docker-build: check-clean
 	docker tag $(IMAGE_NAME) $(FULL_IMAGE)
 	@echo "Built: $(FULL_IMAGE)"
 
+docker-build-clean: check-clean
+	docker build --no-cache -t $(IMAGE_NAME) services/telemetry-api/
+	docker tag $(IMAGE_NAME) $(FULL_IMAGE)
+	@echo "Built (no-cache): $(FULL_IMAGE)"
+
 docker-push: docker-build
 	docker push $(FULL_IMAGE)
 	@echo "Pushed: $(FULL_IMAGE)"
 
 docker-deploy: docker-push
 	@echo "Image deployed to: $(FULL_IMAGE)"
+	@echo "Run 'make tf-apply' to deploy to Cloud Run"
+
+docker-deploy-clean: docker-build-clean
+	docker push $(FULL_IMAGE)
+	@echo "Image deployed (no-cache): $(FULL_IMAGE)"
 	@echo "Run 'make tf-apply' to deploy to Cloud Run"
 
 # =============================================================================
