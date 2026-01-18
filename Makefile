@@ -21,7 +21,8 @@ REPOSITORY_ID := $(shell grep 'repository_id' $(TFVARS_FILE) 2>/dev/null | cut -
 
 # Use git SHA for immutable image tags (industry standard)
 GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
-IMAGE_TAG := $(GIT_SHA)
+GIT_DIRTY := $(shell git status --porcelain 2>/dev/null | grep -q . && echo "-dirty" || echo "")
+IMAGE_TAG := $(GIT_SHA)$(GIT_DIRTY)
 
 # Derived - local
 FIRESTORE_HOST = localhost:$(FIRESTORE_PORT)
@@ -184,7 +185,17 @@ tf-destroy:
 docker-auth:
 	gcloud auth configure-docker $(GCP_REGION)-docker.pkg.dev
 
-docker-build:
+# Check for uncommitted changes
+check-clean:
+	@if [ -n "$(GIT_DIRTY)" ]; then \
+		echo "⚠️  WARNING: Uncommitted changes detected!"; \
+		echo "   Image will be tagged: $(IMAGE_TAG)"; \
+		echo "   Consider committing first for reproducible builds."; \
+		echo ""; \
+		read -p "Continue anyway? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1; \
+	fi
+
+docker-build: check-clean
 	docker build -t $(IMAGE_NAME) services/telemetry-api/
 	docker tag $(IMAGE_NAME) $(FULL_IMAGE)
 	@echo "Built: $(FULL_IMAGE)"
