@@ -252,6 +252,23 @@ func (m *MockDeviceStore) UpdateLastSeen(ctx context.Context, deviceID string) e
 	return nil
 }
 
+func (m *MockDeviceStore) UpdateAppInfo(ctx context.Context, deviceID, appName, appVersion string) error {
+	if m.UpdateErr != nil {
+		return m.UpdateErr
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	device, ok := m.data[deviceID]
+	if !ok {
+		return ErrNotFound
+	}
+	device.AppName = appName
+	device.AppVersion = appVersion
+	m.data[deviceID] = device
+	return nil
+}
+
 func (m *MockDeviceStore) Revoke(ctx context.Context, deviceID string) error {
 	if m.RevokeErr != nil {
 		return m.RevokeErr

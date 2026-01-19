@@ -101,6 +101,7 @@ func main() {
 	mux.HandleFunc("GET /commands", h.AuthMiddleware(h.GetCommands))
 	mux.HandleFunc("POST /commands/{id}/ack", h.AuthMiddleware(h.AckCommand)) // Device acknowledges command
 	mux.HandleFunc("GET /devices/{id}", h.AuthMiddleware(h.GetDevice))
+	mux.HandleFunc("PUT /devices/info", h.AuthMiddleware(h.UpdateDeviceInfo)) // Device updates its own info
 
 	// =========================================================================
 	// Admin endpoints (require API key from Secret Manager)

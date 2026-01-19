@@ -54,3 +54,4 @@ local.tfvars
 
 # Go binaries
 /scripts/deploy/deploy
+/services/telemetry-api/telemetry-api

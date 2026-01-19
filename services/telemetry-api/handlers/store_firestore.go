@@ -192,6 +192,15 @@ func (s *FirestoreDeviceStore) UpdateLastSeen(ctx context.Context, deviceID stri
 	return err
 }
 
+func (s *FirestoreDeviceStore) UpdateAppInfo(ctx context.Context, deviceID, appName, appVersion string) error {
+	_, err := s.client.Collection(s.collection).Doc(deviceID).Update(ctx, []firestore.Update{
+		{Path: "app_name", Value: appName},
+		{Path: "app_version", Value: appVersion},
+		{Path: "last_seen", Value: firestore.ServerTimestamp},
+	})
+	return err
+}
+
 func (s *FirestoreDeviceStore) Revoke(ctx context.Context, deviceID string) error {
 	_, err := s.client.Collection(s.collection).Doc(deviceID).Update(ctx, []firestore.Update{
 		{Path: "revoked", Value: true},

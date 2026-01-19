@@ -28,6 +28,13 @@ resource "google_project_iam_member" "telemetry_api_logging" {
   member  = "serviceAccount:${google_service_account.telemetry_api.email}"
 }
 
+# Allow the service account to sign JWTs (required for Firebase custom tokens)
+resource "google_service_account_iam_member" "telemetry_api_token_creator" {
+  service_account_id = google_service_account.telemetry_api.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.telemetry_api.email}"
+}
+
 # =============================================================================
 # Outputs
 # =============================================================================

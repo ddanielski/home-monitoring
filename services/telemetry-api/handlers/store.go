@@ -55,6 +55,7 @@ type DeviceStore interface {
 	GetByID(ctx context.Context, deviceID string) (*Device, error)
 	GetByMAC(ctx context.Context, macAddress string) (*Device, error) // Check if MAC already registered
 	UpdateLastSeen(ctx context.Context, deviceID string) error
+	UpdateAppInfo(ctx context.Context, deviceID, appName, appVersion string) error // Update firmware info on auth
 	Revoke(ctx context.Context, deviceID string) error
 }
 

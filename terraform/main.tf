@@ -91,8 +91,8 @@ module "cloud_run" {
   image              = "${var.region}-docker.pkg.dev/${var.project_id}/${var.repository_id}/telemetry-api:${var.image_tag}"
   firestore_database = module.firestore.database_name
 
-  allow_unauthenticated    = var.allow_unauthenticated
-  admin_api_key_secret_id  = module.secrets.admin_api_key_secret_id
+  allow_unauthenticated   = var.allow_unauthenticated
+  admin_api_key_secret_id = module.secrets.admin_api_key_secret_id
 
   depends_on = [
     google_project_service.apis,
