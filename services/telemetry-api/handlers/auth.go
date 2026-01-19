@@ -346,8 +346,6 @@ func ValidateMAC(addr string) bool {
 // Admin endpoint to provision a new device with credentials
 type ProvisionDeviceRequest struct {
 	MACAddress string `json:"mac_address"` // Device MAC address (any format)
-	AppName    string `json:"app_name"`
-	AppVersion string `json:"app_version"`
 }
 
 type ProvisionDeviceResponse struct {
@@ -373,27 +371,6 @@ func (h *Handlers) ProvisionDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ValidateMAC(req.MACAddress) {
 		h.jsonError(w, "invalid mac_address format", http.StatusBadRequest)
-		return
-	}
-	if req.AppName == "" {
-		h.jsonError(w, "app_name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate app_name format
-	if err := validate.Identifier(req.AppName); err != nil {
-		h.jsonError(w, fmt.Sprintf("invalid app_name: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if req.AppVersion == "" {
-		h.jsonError(w, "app_version is required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate app_version format
-	if err := validate.Version(req.AppVersion); err != nil {
-		h.jsonError(w, fmt.Sprintf("invalid app_version: %v", err), http.StatusBadRequest)
 		return
 	}
 
@@ -440,8 +417,6 @@ func (h *Handlers) ProvisionDevice(w http.ResponseWriter, r *http.Request) {
 	device := &Device{
 		DeviceID:     deviceID,
 		MACAddress:   normalizedMAC,
-		AppName:      req.AppName,
-		AppVersion:   req.AppVersion,
 		SecretHash:   secretHash,
 		Revoked:      false,
 		RegisteredAt: now,
@@ -463,7 +438,6 @@ func (h *Handlers) ProvisionDevice(w http.ResponseWriter, r *http.Request) {
 		"request_id", reqID,
 		"device_id", deviceID,
 		"mac_address", normalizedMAC,
-		"app_name", req.AppName,
 	)
 
 	w.Header().Set("Content-Type", "application/json")

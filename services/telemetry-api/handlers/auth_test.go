@@ -389,7 +389,7 @@ func TestProvisionDevice_Success(t *testing.T) {
 	mockDeviceStore := NewMockDeviceStore()
 	h := NewWithStores(nil, nil, mockDeviceStore, nil, nil, nil)
 
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_name": "testapp", "app_version": "1.0.0"}`
+	body := `{"mac_address": "AA:BB:CC:DD:EE:FF"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
@@ -433,7 +433,7 @@ func TestProvisionDevice_InvalidJSON(t *testing.T) {
 func TestProvisionDevice_MissingMAC(t *testing.T) {
 	h := NewWithStores(nil, nil, NewMockDeviceStore(), nil, nil, nil)
 
-	body := `{"app_name": "testapp", "app_version": "1.0"}`
+	body := `{}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
@@ -447,49 +447,7 @@ func TestProvisionDevice_MissingMAC(t *testing.T) {
 func TestProvisionDevice_InvalidMAC(t *testing.T) {
 	h := NewWithStores(nil, nil, NewMockDeviceStore(), nil, nil, nil)
 
-	body := `{"mac_address": "invalid-mac", "app_name": "testapp", "app_version": "1.0"}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
-	w := httptest.NewRecorder()
-
-	h.ProvisionDevice(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-}
-
-func TestProvisionDevice_MissingAppName(t *testing.T) {
-	h := NewWithStores(nil, nil, NewMockDeviceStore(), nil, nil, nil)
-
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_version": "1.0"}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
-	w := httptest.NewRecorder()
-
-	h.ProvisionDevice(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-}
-
-func TestProvisionDevice_InvalidAppName(t *testing.T) {
-	h := NewWithStores(nil, nil, NewMockDeviceStore(), nil, nil, nil)
-
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_name": "123invalid", "app_version": "1.0"}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
-	w := httptest.NewRecorder()
-
-	h.ProvisionDevice(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
-	}
-}
-
-func TestProvisionDevice_MissingAppVersion(t *testing.T) {
-	h := NewWithStores(nil, nil, NewMockDeviceStore(), nil, nil, nil)
-
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_name": "testapp"}`
+	body := `{"mac_address": "invalid-mac"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
@@ -508,7 +466,7 @@ func TestProvisionDevice_DuplicateMAC(t *testing.T) {
 	}
 	h := NewWithStores(nil, nil, mockDeviceStore, nil, nil, nil)
 
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_name": "testapp", "app_version": "1.0"}`
+	body := `{"mac_address": "AA:BB:CC:DD:EE:FF"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
@@ -524,7 +482,7 @@ func TestProvisionDevice_StoreError(t *testing.T) {
 	mockDeviceStore.RegisterErr = errors.New("database error")
 	h := NewWithStores(nil, nil, mockDeviceStore, nil, nil, nil)
 
-	body := `{"mac_address": "AA:BB:CC:DD:EE:FF", "app_name": "testapp", "app_version": "1.0"}`
+	body := `{"mac_address": "AA:BB:CC:DD:EE:FF"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
@@ -554,7 +512,7 @@ func TestProvisionDevice_MACFormats(t *testing.T) {
 			mockDeviceStore := NewMockDeviceStore()
 			h := NewWithStores(nil, nil, mockDeviceStore, nil, nil, nil)
 
-			body := `{"mac_address": "` + tc.inputMAC + `", "app_name": "testapp", "app_version": "1.0"}`
+			body := `{"mac_address": "` + tc.inputMAC + `"}`
 			req := httptest.NewRequest(http.MethodPost, "/admin/devices/provision", bytes.NewBufferString(body))
 			w := httptest.NewRecorder()
 
