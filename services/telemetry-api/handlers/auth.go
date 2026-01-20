@@ -142,7 +142,7 @@ func (h *Handlers) AuthDevice(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// AuthMiddleware verifies Firebase tokens on protected endpoints
+// AuthMiddleware verifies JWT tokens on protected endpoints
 func (h *Handlers) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -162,13 +162,13 @@ func (h *Handlers) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 		token := parts[1]
 
-		// Basic token format validation (Firebase tokens are JWTs)
+		// Basic token format validation (JWTs are typically 100-2000 chars)
 		if len(token) < 100 || len(token) > 2000 {
 			h.jsonError(w, "invalid token format", http.StatusUnauthorized)
 			return
 		}
 
-		// Verify token
+		// Verify token signature and claims
 		deviceID, claims, err := h.authService.VerifyToken(ctx, token)
 		if err != nil {
 			h.logger.Warn("token verification failed",
@@ -177,6 +177,29 @@ func (h *Handlers) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			)
 			h.jsonError(w, "invalid token", http.StatusUnauthorized)
 			return
+		}
+
+		// Check if device is revoked (cached, max 5 min delay)
+		if h.deviceStatusCache != nil {
+			revoked, err := h.deviceStatusCache.Get(deviceID)
+			if err != nil {
+				h.logger.Warn("failed to check device revocation status",
+					"request_id", reqID,
+					"device_id", deviceID,
+					"error", err,
+				)
+				// Fail closed - if we can't check, deny access
+				h.jsonError(w, "device revoked", http.StatusForbidden)
+				return
+			}
+			if revoked {
+				h.logger.Info("request from revoked device",
+					"request_id", reqID,
+					"device_id", deviceID,
+				)
+				h.jsonError(w, "device revoked", http.StatusForbidden)
+				return
+			}
 		}
 
 		// Add device info to request context
@@ -316,6 +339,11 @@ func (h *Handlers) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 		)
 		h.jsonError(w, "failed to revoke device", http.StatusInternalServerError)
 		return
+	}
+
+	// Invalidate device status cache for immediate effect
+	if h.deviceStatusCache != nil {
+		h.deviceStatusCache.Invalidate(deviceID)
 	}
 
 	h.logger.Info("device revoked",
