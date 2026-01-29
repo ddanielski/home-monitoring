@@ -7,7 +7,7 @@ allow_unauthenticated = true # Required: devices use app-level auth, not GCP IAM
 # GitHub repositories for Workload Identity Federation
 github_repositories = [
   "ddanielski/home-monitoring",
-  "ddanielski/measuremen-probe"
+  "ddanielski/measurement-probe"
 ]
 
 # Users allowed to access the admin API key from Secret Manager
