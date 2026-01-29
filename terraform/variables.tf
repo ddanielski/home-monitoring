@@ -39,3 +39,8 @@ variable "provisioner_users" {
   default     = []
 }
 
+variable "github_repository" {
+  description = "GitHub repository in format 'owner/repo' for Workload Identity Federation (e.g., 'username/repo')"
+  type        = string
+  default     = ""
+}

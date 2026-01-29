@@ -82,6 +82,34 @@ module "secrets" {
   depends_on = [google_project_service.apis, module.iam]
 }
 
+# Workload Identity Federation for GitHub Actions CI/CD
+module "workload_identity" {
+  count = var.github_repository != "" ? 1 : 0
+
+  source = "./modules/workload-identity"
+
+  project_id            = var.project_id
+  github_repository     = var.github_repository
+  service_account_email = module.secrets.admin_api_key_secret_id # Not used, but required by module
+
+  depends_on = [
+    google_project_service.apis,
+    module.secrets,
+  ]
+}
+
+# Grant CI/CD service account access to GitHub Actions API key secret
+resource "google_secret_manager_secret_iam_member" "cicd_github_actions_secret_access" {
+  count = var.github_repository != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = module.secrets.github_actions_api_key_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.workload_identity[0].service_account_email}"
+
+  depends_on = [module.workload_identity]
+}
+
 module "cloud_run" {
   source = "./modules/cloud-run"
 
@@ -91,8 +119,9 @@ module "cloud_run" {
   image              = "${var.region}-docker.pkg.dev/${var.project_id}/${var.repository_id}/telemetry-api:${var.image_tag}"
   firestore_database = module.firestore.database_name
 
-  allow_unauthenticated   = var.allow_unauthenticated
-  admin_api_key_secret_id = module.secrets.admin_api_key_secret_id
+  allow_unauthenticated            = var.allow_unauthenticated
+  admin_api_key_secret_id          = module.secrets.admin_api_key_secret_id
+  github_actions_api_key_secret_id = module.secrets.github_actions_api_key_secret_id
 
   depends_on = [
     google_project_service.apis,

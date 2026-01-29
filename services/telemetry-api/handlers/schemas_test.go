@@ -222,3 +222,31 @@ func TestGetSchema_StoreError(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
 	}
 }
+
+func TestUploadSchema_FieldIDZero(t *testing.T) {
+	h := NewWithStores(nil, nil, nil, NewMockSchemaStore(), nil, nil)
+
+	body := `{"measurements": {"temp": {"id": 0, "name": "temp", "type": "float", "unit": "c"}}}`
+	req := httptest.NewRequest(http.MethodPost, "/schemas/test-app/1.0.0", bytes.NewBufferString(body))
+	req.SetPathValue("app", "test-app")
+	req.SetPathValue("version", "1.0.0")
+	w := httptest.NewRecorder()
+
+	h.UploadSchema(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d: %s", http.StatusBadRequest, w.Code, w.Body.String())
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if errorMsg, ok := response["error"].(string); !ok || !contains(errorMsg, "field number 0 is reserved") {
+		t.Errorf("expected error about field 0 being reserved, got %v", response["error"])
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && len(s) > 0 && (s[:len(substr)] == substr || contains(s[1:], substr))))
+}

@@ -55,6 +55,11 @@ func main() {
 		slog.Warn("ADMIN_API_KEY not set - admin endpoints will reject all requests")
 	}
 
+	githubActionsAPIKey := os.Getenv("GITHUB_ACTIONS_API_KEY")
+	if githubActionsAPIKey == "" {
+		slog.Warn("GITHUB_ACTIONS_API_KEY not set - schema upload endpoints will only accept admin key")
+	}
+
 	// Initialize handlers with dependencies
 	ctx := context.Background()
 	h, err := handlers.New(ctx, handlers.Config{
@@ -68,7 +73,8 @@ func main() {
 
 	// Admin auth middleware
 	adminAuth := handlers.NewAdminAuthMiddleware(handlers.AdminAuthConfig{
-		APIKey: adminAPIKey,
+		APIKey:              adminAPIKey,
+		GithubActionsAPIKey: githubActionsAPIKey,
 	})
 
 	// Rate limiter for auth endpoint (protect against brute force)
@@ -111,8 +117,8 @@ func main() {
 	mux.HandleFunc("POST /admin/devices/{id}/revoke", adminAuth.RequireAdminKey(h, h.RevokeDevice))
 	mux.HandleFunc("POST /admin/commands", adminAuth.RequireAdminKey(h, h.CreateCommand))
 	mux.HandleFunc("DELETE /admin/commands/{id}", adminAuth.RequireAdminKey(h, h.DeleteCommand))
-	mux.HandleFunc("POST /admin/schemas/{app}/{version}", adminAuth.RequireAdminKey(h, h.UploadSchema))
-	mux.HandleFunc("GET /admin/schemas/{app}/{version}", adminAuth.RequireAdminKey(h, h.GetSchema))
+	mux.HandleFunc("POST /admin/schemas/{app}/{version}", adminAuth.RequireGithubActionsKey(h, h.UploadSchema))
+	mux.HandleFunc("GET /admin/schemas/{app}/{version}", adminAuth.RequireGithubActionsKey(h, h.GetSchema))
 
 	// Apply middleware chain (order matters: first is outermost)
 	handler := middleware.Chain(mux,

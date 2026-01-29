@@ -44,10 +44,15 @@ func (h *Handlers) UploadSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate measurement names
-	for name := range req.Measurements {
+	// Validate measurement names and IDs
+	for name, meta := range req.Measurements {
 		if err := validate.Identifier(name); err != nil {
 			h.jsonError(w, fmt.Sprintf("invalid measurement name %q: %v", name, err), http.StatusBadRequest)
+			return
+		}
+		// Protobuf field number 0 is reserved and cannot be used
+		if meta.ID == 0 {
+			h.jsonError(w, fmt.Sprintf("invalid field ID 0 for measurement %q: field number 0 is reserved by protobuf specification", name), http.StatusBadRequest)
 			return
 		}
 	}

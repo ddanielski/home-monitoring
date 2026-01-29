@@ -34,6 +34,11 @@ variable "admin_api_key_secret_id" {
   type        = string
 }
 
+variable "github_actions_api_key_secret_id" {
+  description = "Secret Manager secret ID for GitHub Actions API key"
+  type        = string
+}
+
 
 resource "google_cloud_run_v2_service" "telemetry_api" {
   name     = "telemetry-api"
@@ -84,6 +89,16 @@ resource "google_cloud_run_v2_service" "telemetry_api" {
         value_source {
           secret_key_ref {
             secret  = var.admin_api_key_secret_id
+            version = "latest"
+          }
+        }
+      }
+      # GitHub Actions API key from Secret Manager
+      env {
+        name = "GITHUB_ACTIONS_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.github_actions_api_key_secret_id
             version = "latest"
           }
         }
