@@ -84,13 +84,12 @@ module "secrets" {
 
 # Workload Identity Federation for GitHub Actions CI/CD
 module "workload_identity" {
-  count = (var.github_repository != "" || length(var.github_repositories) > 0) ? 1 : 0
+  count = length(var.github_repositories) > 0 ? 1 : 0
 
   source = "./modules/workload-identity"
 
   project_id            = var.project_id
-  github_repository     = var.github_repository # For backward compatibility
-  github_repositories   = length(var.github_repositories) > 0 ? var.github_repositories : (var.github_repository != "" ? [var.github_repository] : [])
+  github_repositories   = var.github_repositories
   service_account_email = module.secrets.admin_api_key_secret_id # Not used, but required by module
 
   depends_on = [
@@ -101,7 +100,7 @@ module "workload_identity" {
 
 # Grant CI/CD service account access to GitHub Actions API key secret
 resource "google_secret_manager_secret_iam_member" "cicd_github_actions_secret_access" {
-  count = var.github_repository != "" ? 1 : 0
+  count = length(var.github_repositories) > 0 ? 1 : 0
 
   project   = var.project_id
   secret_id = module.secrets.github_actions_api_key_secret_id

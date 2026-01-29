@@ -39,12 +39,6 @@ variable "provisioner_users" {
   default     = []
 }
 
-variable "github_repository" {
-  description = "GitHub repository in format 'owner/repo' for Workload Identity Federation (e.g., 'username/repo'). Deprecated: use github_repositories instead."
-  type        = string
-  default     = ""
-}
-
 variable "github_repositories" {
   description = "List of GitHub repositories in format 'owner/repo' for Workload Identity Federation (e.g., ['username/repo1', 'username/repo2'])"
   type        = list(string)

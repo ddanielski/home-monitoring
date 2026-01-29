@@ -15,16 +15,9 @@ variable "provider_id" {
   default     = "github-actions-provider"
 }
 
-variable "github_repository" {
-  description = "GitHub repository in format 'owner/repo' (e.g., 'username/repo'). Deprecated: use github_repositories instead."
-  type        = string
-  default     = ""
-}
-
 variable "github_repositories" {
   description = "List of GitHub repositories in format 'owner/repo' (e.g., ['username/repo1', 'username/repo2'])"
   type        = list(string)
-  default     = []
 }
 
 variable "service_account_email" {
@@ -77,11 +70,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
 
-  attribute_condition = length(var.github_repositories) > 0 ? (
-    "assertion.repository in [${join(", ", [for repo in var.github_repositories : "\"${repo}\""])}]"
-  ) : (
-    var.github_repository != "" ? "assertion.repository == \"${var.github_repository}\"" : "false"
-  )
+  attribute_condition = "assertion.repository in [${join(", ", [for repo in var.github_repositories : "\"${repo}\""])}]"
 }
 
 # Service Account for CI/CD
@@ -94,9 +83,7 @@ resource "google_service_account" "cicd" {
 # Allow Workload Identity Provider to impersonate the CI/CD service account
 # Create IAM bindings for each repository
 resource "google_service_account_iam_member" "workload_identity_binding" {
-  for_each = length(var.github_repositories) > 0 ? toset(var.github_repositories) : (
-    var.github_repository != "" ? toset([var.github_repository]) : toset([])
-  )
+  for_each = toset(var.github_repositories)
 
   service_account_id = google_service_account.cicd.name
   role               = "roles/iam.workloadIdentityUser"

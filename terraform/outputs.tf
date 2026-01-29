@@ -21,10 +21,10 @@ output "pubsub_telemetry_topic" {
 # Workload Identity Federation outputs (if enabled)
 output "workload_identity_provider_resource_name" {
   description = "Full resource name of the Workload Identity Provider (for GitHub Actions)"
-  value       = (var.github_repository != "" || length(var.github_repositories) > 0) ? module.workload_identity[0].workload_identity_provider_resource_name : null
+  value       = length(var.github_repositories) > 0 ? module.workload_identity[0].workload_identity_provider_resource_name : null
 }
 
 output "cicd_service_account_email" {
   description = "Email of the CI/CD service account for GitHub Actions"
-  value       = (var.github_repository != "" || length(var.github_repositories) > 0) ? module.workload_identity[0].service_account_email : null
+  value       = length(var.github_repositories) > 0 ? module.workload_identity[0].service_account_email : null
 }
