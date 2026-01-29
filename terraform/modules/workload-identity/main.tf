@@ -16,8 +16,15 @@ variable "provider_id" {
 }
 
 variable "github_repository" {
-  description = "GitHub repository in format 'owner/repo' (e.g., 'username/repo')"
+  description = "GitHub repository in format 'owner/repo' (e.g., 'username/repo'). Deprecated: use github_repositories instead."
   type        = string
+  default     = ""
+}
+
+variable "github_repositories" {
+  description = "List of GitHub repositories in format 'owner/repo' (e.g., ['username/repo1', 'username/repo2'])"
+  type        = list(string)
+  default     = []
 }
 
 variable "service_account_email" {
@@ -70,7 +77,11 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
 
-  attribute_condition = "assertion.repository == \"${var.github_repository}\""
+  attribute_condition = length(var.github_repositories) > 0 ? (
+    "assertion.repository in [${join(", ", [for repo in var.github_repositories : "\"${repo}\""])}]"
+  ) : (
+    var.github_repository != "" ? "assertion.repository == \"${var.github_repository}\"" : "false"
+  )
 }
 
 # Service Account for CI/CD
@@ -81,10 +92,15 @@ resource "google_service_account" "cicd" {
 }
 
 # Allow Workload Identity Provider to impersonate the CI/CD service account
+# Create IAM bindings for each repository
 resource "google_service_account_iam_member" "workload_identity_binding" {
+  for_each = length(var.github_repositories) > 0 ? toset(var.github_repositories) : (
+    var.github_repository != "" ? toset([var.github_repository]) : toset([])
+  )
+
   service_account_id = google_service_account.cicd.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.pool_id}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.pool_id}/attribute.repository/${each.value}"
 }
 
 # Allow CI/CD service account to view Cloud Run services (to fetch service URL dynamically)

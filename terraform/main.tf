@@ -84,12 +84,13 @@ module "secrets" {
 
 # Workload Identity Federation for GitHub Actions CI/CD
 module "workload_identity" {
-  count = var.github_repository != "" ? 1 : 0
+  count = (var.github_repository != "" || length(var.github_repositories) > 0) ? 1 : 0
 
   source = "./modules/workload-identity"
 
   project_id            = var.project_id
-  github_repository     = var.github_repository
+  github_repository     = var.github_repository # For backward compatibility
+  github_repositories   = length(var.github_repositories) > 0 ? var.github_repositories : (var.github_repository != "" ? [var.github_repository] : [])
   service_account_email = module.secrets.admin_api_key_secret_id # Not used, but required by module
 
   depends_on = [
