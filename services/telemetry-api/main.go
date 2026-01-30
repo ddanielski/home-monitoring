@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -61,13 +60,17 @@ func main() {
 		slog.Warn("GITHUB_ACTIONS_API_KEY not set - schema upload endpoints will only accept admin key")
 	}
 
-	serviceURL := fmt.Sprintf("https://telemetry-api.%s.run.app", projectID)
+	serviceName := os.Getenv("K_SERVICE")
+	if serviceName == "" {
+		serviceName = "telemetry-api"
+	}
+	serviceAudience := "https://" + serviceName
 
 	// Initialize handlers with dependencies
 	ctx := context.Background()
 	h, err := handlers.New(ctx, handlers.Config{
 		ProjectID:  projectID,
-		ServiceURL: serviceURL,
+		ServiceURL: serviceAudience,
 	})
 	if err != nil {
 		slog.Error("failed to initialize handlers", "error", err)
