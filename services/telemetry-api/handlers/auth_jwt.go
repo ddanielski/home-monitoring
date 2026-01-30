@@ -41,7 +41,6 @@ type JWTClaims struct {
 }
 
 // NewJWTAuthService creates a new JWT auth service that uses GCP service account signing
-// serviceURL is the Cloud Run service URL to use as JWT audience (if empty, constructs from projectID)
 func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string) (*JWTAuthService, error) {
 	// Get default credentials to find service account email
 	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
@@ -49,12 +48,10 @@ func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string)
 		return nil, fmt.Errorf("failed to find default credentials: %w", err)
 	}
 
-	// Parse service account email from credentials
 	var credInfo struct {
 		ClientEmail string `json:"client_email"`
 	}
 	
-	// Try to parse credential info - may be empty for compute engine default SA
 	serviceAccountEmail := ""
 	if creds.JSON != nil {
 		if err := json.Unmarshal(creds.JSON, &credInfo); err == nil && credInfo.ClientEmail != "" {
@@ -62,20 +59,13 @@ func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string)
 		}
 	}
 	
-	// Fallback to constructing from project ID (for Cloud Run)
 	if serviceAccountEmail == "" {
 		serviceAccountEmail = fmt.Sprintf("telemetry-api-sa@%s.iam.gserviceaccount.com", projectID)
 	}
 
-	// Create IAM credentials service for signing
 	iamService, err := iamcredentials.NewService(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create IAM credentials service: %w", err)
-	}
-
-	// If serviceURL not provided, construct default (backward compatibility)
-	if serviceURL == "" {
-		serviceURL = fmt.Sprintf("https://telemetry-api.%s.run.app", projectID)
 	}
 
 	return &JWTAuthService{
@@ -153,20 +143,14 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 
 // VerifyToken verifies a JWT and returns the device ID and claims
 func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (string, map[string]interface{}, error) {
-	// Parse and verify the token
-	// Configure parser to validate audience against actual service URL
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		// Get the key ID from header
 		kid, _ := token.Header["kid"].(string)
-		
-		// Get public key for verification
 		return s.getPublicKey(ctx, kid)
-	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(s.serviceURL))
+	}, jwt.WithValidMethods([]string{"RS256"}))
 
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to parse token: %w", err)
@@ -177,9 +161,20 @@ func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (s
 		return "", nil, fmt.Errorf("invalid token claims")
 	}
 
-	// Verify issuer
 	if claims.Issuer != s.serviceAccountEmail {
 		return "", nil, fmt.Errorf("invalid token issuer")
+	}
+
+	audienceValid := false
+	for _, aud := range claims.Audience {
+		if aud == s.serviceURL {
+			audienceValid = true
+			break
+		}
+	}
+	
+	if !audienceValid && len(claims.Audience) > 0 {
+		return "", nil, fmt.Errorf("invalid token audience: expected %s, got %v", s.serviceURL, claims.Audience)
 	}
 
 	// Build claims map for compatibility

@@ -83,12 +83,6 @@ resource "google_cloud_run_v2_service" "telemetry_api" {
         name  = "ENVIRONMENT"
         value = "production"
       }
-      # Cloud Run service URL for JWT audience
-      env {
-        name  = "SERVICE_URL"
-        value = google_cloud_run_v2_service.telemetry_api.uri
-      }
-      # Admin API key from Secret Manager
       env {
         name = "ADMIN_API_KEY"
         value_source {

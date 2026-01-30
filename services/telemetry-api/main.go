@@ -61,14 +61,7 @@ func main() {
 		slog.Warn("GITHUB_ACTIONS_API_KEY not set - schema upload endpoints will only accept admin key")
 	}
 
-	// Get Cloud Run service URL for JWT audience
-	// Cloud Run sets K_SERVICE, but we need the full URL
-	// Try environment variable first, then construct from project ID
-	serviceURL := os.Getenv("SERVICE_URL")
-	if serviceURL == "" {
-		// Fallback: construct from project ID (backward compatibility)
-		serviceURL = fmt.Sprintf("https://telemetry-api.%s.run.app", projectID)
-	}
+	serviceURL := fmt.Sprintf("https://telemetry-api.%s.run.app", projectID)
 
 	// Initialize handlers with dependencies
 	ctx := context.Background()
