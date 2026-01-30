@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -92,63 +91,49 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 		appVersion = v
 	}
 
-	// Create JWT claims
-	jwtClaims := JWTClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    s.serviceAccountEmail,
-			Subject:   deviceID,
-			Audience:  jwt.ClaimStrings{s.serviceURL},
-			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			ID:        fmt.Sprintf("%s-%d", deviceID, now.UnixNano()),
-		},
-		DeviceID:   deviceID,
-		AppName:    appName,
-		AppVersion: appVersion,
-		Claims:     claims,
+	// Build JWT payload as JSON (SignJwt handles the header and signature)
+	payload := map[string]interface{}{
+		"iss":         s.serviceAccountEmail,
+		"sub":         deviceID,
+		"aud":         s.serviceURL,
+		"exp":         now.Add(1 * time.Hour).Unix(),
+		"iat":         now.Unix(),
+		"nbf":         now.Unix(),
+		"jti":         fmt.Sprintf("%s-%d", deviceID, now.UnixNano()),
+		"device_id":   deviceID,
+		"app_name":    appName,
+		"app_version": appVersion,
+		"claims":      claims,
 	}
 
-	// Create unsigned token
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwtClaims)
-
-	// Get the signing string (header.payload)
-	signingString, err := token.SigningString()
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("failed to create signing string: %w", err)
+		return "", fmt.Errorf("failed to marshal claims: %w", err)
 	}
 
-	// Sign using IAM credentials API
-	signReq := &iamcredentials.SignBlobRequest{
-		Payload: base64.StdEncoding.EncodeToString([]byte(signingString)),
+	// Sign using IAM SignJwt API (includes kid header automatically)
+	signReq := &iamcredentials.SignJwtRequest{
+		Payload: string(payloadJSON),
 	}
 
 	name := fmt.Sprintf("projects/-/serviceAccounts/%s", s.serviceAccountEmail)
-	signResp, err := s.iamService.Projects.ServiceAccounts.SignBlob(name, signReq).Context(ctx).Do()
+	signResp, err := s.iamService.Projects.ServiceAccounts.SignJwt(name, signReq).Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("failed to sign token: %w", err)
 	}
 
-	// Decode signature and create final token
-	signature, err := base64.StdEncoding.DecodeString(signResp.SignedBlob)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode signature: %w", err)
-	}
-
-	// Build final JWT: header.payload.signature
-	signedToken := signingString + "." + base64.RawURLEncoding.EncodeToString(signature)
-
-	return signedToken, nil
+	return signResp.SignedJwt, nil
 }
 
 // VerifyToken verifies a JWT and returns the device ID and claims
 func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (string, map[string]interface{}, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 
-		kid, _ := token.Header["kid"].(string)
+		// SignJwt includes kid header, use it to get the correct key
+		kid, _ := t.Header["kid"].(string)
 		return s.getPublicKey(ctx, kid)
 	}, jwt.WithValidMethods([]string{"RS256"}))
 
@@ -190,32 +175,32 @@ func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (s
 	return claims.DeviceID, claimsMap, nil
 }
 
-// getPublicKey fetches the public key for the service account
+// getPublicKey returns the public key for the given kid, refreshing cache if needed
 func (s *JWTAuthService) getPublicKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	s.keysMu.RLock()
 	if time.Now().Before(s.keysExpiry) && len(s.publicKeys) > 0 {
-		// Try to find key by kid, or return first key if no kid
-		if kid != "" {
-			if key, ok := s.publicKeys[kid]; ok {
-				s.keysMu.RUnlock()
-				return key, nil
-			}
-		} else {
-			// Return any key if no kid specified
-			for _, key := range s.publicKeys {
-				s.keysMu.RUnlock()
-				return key, nil
-			}
+		if key, ok := s.publicKeys[kid]; ok {
+			s.keysMu.RUnlock()
+			return key, nil
 		}
 	}
 	s.keysMu.RUnlock()
 
-	// Fetch fresh keys
-	return s.fetchPublicKeys(ctx, kid)
+	// Fetch fresh keys (might be a newly rotated key)
+	if err := s.refreshPublicKeys(ctx); err != nil {
+		return nil, err
+	}
+
+	s.keysMu.RLock()
+	defer s.keysMu.RUnlock()
+	if key, ok := s.publicKeys[kid]; ok {
+		return key, nil
+	}
+	return nil, fmt.Errorf("public key not found for kid: %s", kid)
 }
 
-// fetchPublicKeys fetches the service account's public keys from Google
-func (s *JWTAuthService) fetchPublicKeys(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+// refreshPublicKeys fetches the service account's public keys from Google
+func (s *JWTAuthService) refreshPublicKeys(ctx context.Context) error {
 	s.keysMu.Lock()
 	defer s.keysMu.Unlock()
 
@@ -224,24 +209,24 @@ func (s *JWTAuthService) fetchPublicKeys(ctx context.Context, kid string) (*rsa.
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch public keys: %w", err)
+		return fmt.Errorf("failed to fetch public keys: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to fetch public keys: %s - %s", resp.Status, string(body))
+		return fmt.Errorf("failed to fetch public keys: %s - %s", resp.Status, string(body))
 	}
 
 	// Parse response - map of key ID to X.509 certificate (PEM)
 	var certs map[string]string
 	if err := json.NewDecoder(resp.Body).Decode(&certs); err != nil {
-		return nil, fmt.Errorf("failed to decode public keys: %w", err)
+		return fmt.Errorf("failed to decode public keys: %w", err)
 	}
 
 	// Parse certificates and extract public keys
@@ -254,22 +239,13 @@ func (s *JWTAuthService) fetchPublicKeys(ctx context.Context, kid string) (*rsa.
 		s.publicKeys[keyID] = key
 	}
 
+	if len(s.publicKeys) == 0 {
+		return fmt.Errorf("no valid public keys found")
+	}
+
 	// Cache for 1 hour
 	s.keysExpiry = time.Now().Add(1 * time.Hour)
-
-	// Return requested key
-	if kid != "" {
-		if key, ok := s.publicKeys[kid]; ok {
-			return key, nil
-		}
-	}
-
-	// Return first available key
-	for _, key := range s.publicKeys {
-		return key, nil
-	}
-
-	return nil, fmt.Errorf("no valid public keys found")
+	return nil
 }
 
 // Close is a no-op
