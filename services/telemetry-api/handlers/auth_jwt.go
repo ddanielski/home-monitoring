@@ -20,15 +20,15 @@ import (
 // Tokens are signed by the GCP service account and can be verified
 // without any client-side exchange (unlike Firebase custom tokens)
 type JWTAuthService struct {
-	projectID          string
+	projectID           string
 	serviceAccountEmail string
-	serviceURL         string // Cloud Run service URL for JWT audience
-	iamService         *iamcredentials.Service
-	
+	serviceURL          string // Cloud Run service URL for JWT audience
+	iamService          *iamcredentials.Service
+
 	// Cache for service account public keys
-	publicKeys   map[string]*rsa.PublicKey
-	keysMu       sync.RWMutex
-	keysExpiry   time.Time
+	publicKeys map[string]*rsa.PublicKey
+	keysMu     sync.RWMutex
+	keysExpiry time.Time
 }
 
 // JWTClaims represents the claims in our device tokens
@@ -51,14 +51,14 @@ func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string)
 	var credInfo struct {
 		ClientEmail string `json:"client_email"`
 	}
-	
+
 	serviceAccountEmail := ""
 	if creds.JSON != nil {
 		if err := json.Unmarshal(creds.JSON, &credInfo); err == nil && credInfo.ClientEmail != "" {
 			serviceAccountEmail = credInfo.ClientEmail
 		}
 	}
-	
+
 	if serviceAccountEmail == "" {
 		serviceAccountEmail = fmt.Sprintf("telemetry-api-sa@%s.iam.gserviceaccount.com", projectID)
 	}
@@ -69,11 +69,11 @@ func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string)
 	}
 
 	return &JWTAuthService{
-		projectID:          projectID,
+		projectID:           projectID,
 		serviceAccountEmail: serviceAccountEmail,
-		serviceURL:         serviceURL,
-		iamService:         iamService,
-		publicKeys:         make(map[string]*rsa.PublicKey),
+		serviceURL:          serviceURL,
+		iamService:          iamService,
+		publicKeys:          make(map[string]*rsa.PublicKey),
 	}, nil
 }
 
@@ -81,7 +81,7 @@ func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string)
 // This token can be used directly by devices without any exchange step
 func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string, claims map[string]interface{}) (string, error) {
 	now := time.Now()
-	
+
 	// Extract known claims
 	appName := ""
 	appVersion := ""
@@ -111,7 +111,7 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 
 	// Create unsigned token
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwtClaims)
-	
+
 	// Get the signing string (header.payload)
 	signingString, err := token.SigningString()
 	if err != nil {
@@ -122,7 +122,7 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 	signReq := &iamcredentials.SignBlobRequest{
 		Payload: base64.StdEncoding.EncodeToString([]byte(signingString)),
 	}
-	
+
 	name := fmt.Sprintf("projects/-/serviceAccounts/%s", s.serviceAccountEmail)
 	signResp, err := s.iamService.Projects.ServiceAccounts.SignBlob(name, signReq).Context(ctx).Do()
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 
 	// Build final JWT: header.payload.signature
 	signedToken := signingString + "." + base64.RawURLEncoding.EncodeToString(signature)
-	
+
 	return signedToken, nil
 }
 
@@ -172,7 +172,7 @@ func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (s
 			break
 		}
 	}
-	
+
 	if !audienceValid && len(claims.Audience) > 0 {
 		return "", nil, fmt.Errorf("invalid token audience: expected %s, got %v", s.serviceURL, claims.Audience)
 	}
@@ -221,7 +221,7 @@ func (s *JWTAuthService) fetchPublicKeys(ctx context.Context, kid string) (*rsa.
 
 	// Fetch from Google's public key endpoint for service accounts
 	url := fmt.Sprintf("https://www.googleapis.com/service_accounts/v1/metadata/x509/%s", s.serviceAccountEmail)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -263,7 +263,7 @@ func (s *JWTAuthService) fetchPublicKeys(ctx context.Context, kid string) (*rsa.
 			return key, nil
 		}
 	}
-	
+
 	// Return first available key
 	for _, key := range s.publicKeys {
 		return key, nil
