@@ -23,7 +23,8 @@ const (
 
 // Config holds handler configuration
 type Config struct {
-	ProjectID string
+	ProjectID  string
+	ServiceURL string // Cloud Run service URL for JWT audience (optional, defaults to constructed URL)
 }
 
 // Handlers contains all HTTP handlers and their dependencies
@@ -59,7 +60,9 @@ func New(ctx context.Context, cfg Config) (*Handlers, error) {
 	}
 
 	// Initialize JWT Auth service (self-signed tokens, no Firebase exchange needed)
-	authService, err := NewJWTAuthService(ctx, cfg.ProjectID)
+	// Use service URL from config if provided, otherwise construct from project ID
+	serviceURL := cfg.ServiceURL
+	authService, err := NewJWTAuthService(ctx, cfg.ProjectID, serviceURL)
 	if err != nil {
 		fsClient.Close()
 		psClient.Close()

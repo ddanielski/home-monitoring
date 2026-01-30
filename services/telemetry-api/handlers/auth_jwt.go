@@ -22,6 +22,7 @@ import (
 type JWTAuthService struct {
 	projectID          string
 	serviceAccountEmail string
+	serviceURL         string // Cloud Run service URL for JWT audience
 	iamService         *iamcredentials.Service
 	
 	// Cache for service account public keys
@@ -40,7 +41,8 @@ type JWTClaims struct {
 }
 
 // NewJWTAuthService creates a new JWT auth service that uses GCP service account signing
-func NewJWTAuthService(ctx context.Context, projectID string) (*JWTAuthService, error) {
+// serviceURL is the Cloud Run service URL to use as JWT audience (if empty, constructs from projectID)
+func NewJWTAuthService(ctx context.Context, projectID string, serviceURL string) (*JWTAuthService, error) {
 	// Get default credentials to find service account email
 	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
 	if err != nil {
@@ -71,9 +73,15 @@ func NewJWTAuthService(ctx context.Context, projectID string) (*JWTAuthService, 
 		return nil, fmt.Errorf("failed to create IAM credentials service: %w", err)
 	}
 
+	// If serviceURL not provided, construct default (backward compatibility)
+	if serviceURL == "" {
+		serviceURL = fmt.Sprintf("https://telemetry-api.%s.run.app", projectID)
+	}
+
 	return &JWTAuthService{
 		projectID:          projectID,
 		serviceAccountEmail: serviceAccountEmail,
+		serviceURL:         serviceURL,
 		iamService:         iamService,
 		publicKeys:         make(map[string]*rsa.PublicKey),
 	}, nil
@@ -99,7 +107,7 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.serviceAccountEmail,
 			Subject:   deviceID,
-			Audience:  jwt.ClaimStrings{fmt.Sprintf("https://telemetry-api.%s.run.app", s.projectID)},
+			Audience:  jwt.ClaimStrings{s.serviceURL},
 			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
@@ -146,6 +154,7 @@ func (s *JWTAuthService) CreateCustomToken(ctx context.Context, deviceID string,
 // VerifyToken verifies a JWT and returns the device ID and claims
 func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (string, map[string]interface{}, error) {
 	// Parse and verify the token
+	// Configure parser to validate audience against actual service URL
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
@@ -157,7 +166,7 @@ func (s *JWTAuthService) VerifyToken(ctx context.Context, tokenString string) (s
 		
 		// Get public key for verification
 		return s.getPublicKey(ctx, kid)
-	})
+	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(s.serviceURL))
 
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to parse token: %w", err)
